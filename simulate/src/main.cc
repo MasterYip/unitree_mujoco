@@ -34,6 +34,7 @@
 #include "array_safety.h"
 #include "unitree_sdk2_bridge.h"
 #include "param.h"
+#include "camera_follow.h"
 
 #define MUJOCO_PLUGIN_DIR "mujoco_plugin"
 #define NUM_MOTOR_IDL_GO 20
@@ -99,6 +100,58 @@ namespace
   // model and data
   mjModel *m = nullptr;
   mjData *d = nullptr;
+
+  mjvCamera *viewer_camera = nullptr;
+  int camera_follow_body_id = -1;
+  camera_follow::Filter camera_filter;
+  double camera_last_time = -1.0;
+
+  std::string CameraFollowBodyName()
+  {
+    if (!param::config.camera_follow_body.empty()) return param::config.camera_follow_body;
+    return param::config.robot == "g1" ? "pelvis" : "base_link";
+  }
+
+  void ConfigureCameraFollow()
+  {
+    camera_follow_body_id = -1;
+    camera_filter.Reset();
+    camera_last_time = -1.0;
+    if (!param::config.camera_follow || !m || !viewer_camera) return;
+    const std::string body_name = CameraFollowBodyName();
+    camera_follow_body_id = mj_name2id(m, mjOBJ_BODY, body_name.c_str());
+    if (camera_follow_body_id < 0) {
+      std::fprintf(stderr, "Camera follow body '%s' does not exist; follow mode disabled for this model.\n",
+                   body_name.c_str());
+      return;
+    }
+    viewer_camera->distance = param::config.camera_distance;
+    viewer_camera->azimuth = param::config.camera_azimuth;
+    viewer_camera->elevation = param::config.camera_elevation;
+    std::printf("Camera following body '%s' (%s heading, tau=%.3fs).\n", body_name.c_str(),
+                param::config.camera_follow_yaw ? "yaw-follow" : "world-fixed",
+                param::config.camera_smoothing_tau);
+  }
+
+  void UpdateCameraFollow()
+  {
+    if (camera_follow_body_id < 0 || !d || !viewer_camera) return;
+    if (camera_last_time >= 0.0 && d->time < camera_last_time) camera_filter.Reset();
+    const double dt = camera_last_time < 0.0 ? 0.0 : d->time - camera_last_time;
+    camera_last_time = d->time;
+    const mjtNum *position = d->xpos + 3 * camera_follow_body_id;
+    const mjtNum *quaternion = d->xquat + 4 * camera_follow_body_id;
+    camera_follow::Pose pose{{position[0], position[1], position[2]},
+                             {quaternion[0], quaternion[1], quaternion[2], quaternion[3]}};
+    camera_follow::Settings settings;
+    settings.lookat_offset = param::config.camera_lookat_offset;
+    settings.azimuth = param::config.camera_azimuth;
+    settings.smoothing_tau = param::config.camera_smoothing_tau;
+    settings.follow_yaw = param::config.camera_follow_yaw != 0;
+    const auto output = camera_filter.Update(pose, dt, settings);
+    for (int i = 0; i < 3; ++i) viewer_camera->lookat[i] = output.lookat[i];
+    viewer_camera->azimuth = output.azimuth;
+  }
 
   // control noise variables
   mjtNum *ctrlnoise = nullptr;
@@ -356,6 +409,7 @@ namespace
           m = mnew;
           d = dnew;
           mj_forward(m, d);
+          ConfigureCameraFollow();
 
           // allocate ctrlnoise
           free(ctrlnoise);
@@ -386,6 +440,7 @@ namespace
           m = mnew;
           d = dnew;
           mj_forward(m, d);
+          ConfigureCameraFollow();
 
           // allocate ctrlnoise
           free(ctrlnoise);
@@ -528,6 +583,7 @@ namespace
             mj_forward(m, d);
             sim.speed_changed = true;
           }
+          UpdateCameraFollow();
         }
       } // release std::lock_guard<std::mutex>
     }
@@ -549,6 +605,7 @@ void PhysicsThread(mj::Simulate *sim, const char *filename)
     {
       sim->Load(m, d, filename);
       mj_forward(m, d);
+      ConfigureCameraFollow();
 
       // allocate ctrlnoise
       free(ctrlnoise);
@@ -634,6 +691,8 @@ void user_key_cb(GLFWwindow* window, int key, int scancode, int act, int mods) {
     if(key==GLFW_KEY_BACKSPACE) {
       mj_resetData(m, d);
       mj_forward(m, d);
+      camera_filter.Reset();
+      camera_last_time = -1.0;
     }
   }
 }
@@ -663,6 +722,7 @@ int main(int argc, char **argv)
 
   mjvCamera cam;
   mjv_defaultCamera(&cam);
+  viewer_camera = &cam;
 
   mjvOption opt;
   mjv_defaultOption(&opt);

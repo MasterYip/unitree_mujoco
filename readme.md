@@ -148,7 +148,25 @@ print_scene_information: 1
 # Whether to use virtual tape, 1 to enable
 # Mainly used to simulate the hanging process of H1 robot initialization
 enable_elastic_band: 0 # For H1
+
+# Optional viewer-only body tracking (disabled keeps the stock free camera)
+camera_follow: 1
+camera_follow_body: "pelvis"  # G1 root body; resolved by name, never numeric ID
+camera_lookat_offset: [0.0, 0.0, 0.0]
+camera_follow_yaw: 0           # 0: world-fixed heading, 1: body-yaw heading
+camera_smoothing_tau: 0.15     # seconds; 0 disables damping
+camera_distance: 3.0
+camera_azimuth: 90.0
+camera_elevation: -20.0
 ```
+
+The C++ simulator also accepts `--camera-follow --camera-follow-body pelvis`,
+`--camera-follow-yaw`, `--camera-smoothing-tau`, camera pose options, and
+`--camera-lookat-{x,y,z}`. The Python simulator uses the corresponding
+`CAMERA_*` settings in `simulate_python/config.py`. Tracking changes only the
+viewer camera; it never writes MuJoCo state. Both paths reset their damping
+state when simulation time moves backwards, and the C++ path re-resolves the
+body after model reload.
 ### Python Simulator
 The configuration file for the Python simulator is located at `/simulate_python/config.py`:
 ```python

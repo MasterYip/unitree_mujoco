@@ -12,3 +12,13 @@ ENABLE_ELASTIC_BAND = False # Virtual spring band, used for lifting h1
 
 SIMULATE_DT = 0.005  # Need to be larger than the runtime of viewer.sync()
 VIEWER_DT = 0.02  # 50 fps for viewer
+
+# Optional viewer-only camera tracking. False preserves the stock free camera.
+CAMERA_FOLLOW = False
+CAMERA_FOLLOW_BODY = ""  # empty = pelvis for G1, base_link otherwise
+CAMERA_LOOKAT_OFFSET = (0.0, 0.0, 0.0)
+CAMERA_FOLLOW_YAW = False  # False keeps a world-fixed heading
+CAMERA_SMOOTHING_TAU = 0.15  # seconds; 0 disables damping
+CAMERA_DISTANCE = 3.0
+CAMERA_AZIMUTH = 90.0
+CAMERA_ELEVATION = -20.0

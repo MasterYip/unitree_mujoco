@@ -8,12 +8,29 @@ from unitree_sdk2py.core.channel import ChannelFactoryInitialize
 from unitree_sdk2py_bridge import UnitreeSdk2Bridge, ElasticBand
 
 import config
+from camera_follow import CameraFollower
 
 
 locker = threading.Lock()
 
 mj_model = mujoco.MjModel.from_xml_path(config.ROBOT_SCENE)
 mj_data = mujoco.MjData(mj_model)
+
+camera_follower = None
+camera_follow_body_id = None
+camera_last_time = None
+if config.CAMERA_FOLLOW:
+    camera_follow_body = config.CAMERA_FOLLOW_BODY or ("pelvis" if config.ROBOT == "g1" else "base_link")
+    try:
+        camera_follow_body_id = mj_model.body(camera_follow_body).id
+    except KeyError as exc:
+        raise ValueError(f"camera follow body {camera_follow_body!r} does not exist in the loaded model") from exc
+    camera_follower = CameraFollower(
+        offset=tuple(config.CAMERA_LOOKAT_OFFSET),
+        azimuth=config.CAMERA_AZIMUTH,
+        follow_yaw=config.CAMERA_FOLLOW_YAW,
+        smoothing_tau=config.CAMERA_SMOOTHING_TAU,
+    )
 
 
 if config.ENABLE_ELASTIC_BAND:
@@ -68,8 +85,21 @@ def SimulationThread():
 
 
 def PhysicsViewerThread():
+    global camera_last_time
     while viewer.is_running():
         locker.acquire()
+        if camera_follower is not None:
+            if camera_last_time is not None and mj_data.time < camera_last_time:
+                camera_follower.reset()
+            dt = 0.0 if camera_last_time is None else mj_data.time - camera_last_time
+            camera_last_time = mj_data.time
+            lookat, azimuth = camera_follower.update(
+                mj_data.xpos[camera_follow_body_id], mj_data.xquat[camera_follow_body_id], dt
+            )
+            viewer.cam.lookat[:] = lookat
+            viewer.cam.azimuth = azimuth
+            viewer.cam.distance = config.CAMERA_DISTANCE
+            viewer.cam.elevation = config.CAMERA_ELEVATION
         viewer.sync()
         locker.release()
         time.sleep(config.VIEWER_DT)

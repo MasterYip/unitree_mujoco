@@ -12,3 +12,13 @@ joystick_bits: 16 # Some game controllers may only have 8-bit accuracy
 print_scene_information: 1 # Print link, joint and sensors information of robot
 
 enable_elastic_band: 0 # Virtual spring band, used for lifting h1
+
+# Optional viewer camera tracking. Disabled preserves the stock free camera.
+camera_follow: 0
+camera_follow_body: ""       # empty = pelvis for G1, base_link otherwise
+camera_lookat_offset: [0.0, 0.0, 0.0]
+camera_follow_yaw: 0          # 0 = world-fixed heading; 1 = follow body yaw
+camera_smoothing_tau: 0.15    # seconds; 0 disables damping
+camera_distance: 3.0
+camera_azimuth: 90.0
+camera_elevation: -20.0
